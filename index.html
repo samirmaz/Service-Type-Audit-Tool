@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Service Type Audit Tool</title>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="vin-data.js"></script> <!-- Load VIN data from external JS file -->
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -16,7 +16,7 @@
     .input-section, .dashboard-section {
       margin-top: 20px;
     }
-    input[type="text"], input[type="file"], button {
+    input[type="text"], button {
       padding: 8px;
       margin: 5px 0;
       display: block;
@@ -66,9 +66,6 @@
   <label>Scan or Enter VIN:</label>
   <input type="text" id="vinInput" placeholder="Enter VIN" />
   <button onclick="searchServiceType()">Search</button>
-
-  <label>Upload Excel:</label>
-  <input type="file" id="excelFile" accept=".xlsx" />
 </div>
 
 <div id="result"></div>
@@ -86,6 +83,7 @@
     <tbody></tbody>
   </table>
   <button onclick="downloadCSV()">Download as CSV</button>
+  <button onclick="confirmClear()">Clear</button>
 </div>
 
 <!-- Pop-up -->
@@ -97,35 +95,16 @@
 </div>
 
 <script>
-  let vinData = {}; // stores VIN: serviceType pairs
   let deniedCorrections = [];
 
-  document.getElementById('excelFile').addEventListener('change', handleFileUpload);
-
-  function handleFileUpload(event) {
-    const file = event.target.files[0];
-    const reader = new FileReader();
-
-    reader.onload = function(e) {
-      const data = new Uint8Array(e.target.result);
-      const workbook = XLSX.read(data, { type: 'array' });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-
-      // Assume first row is header, start from second row
-      rows.slice(1).forEach(row => {
-        const vin = row[0]?.toString().trim();
-        const service = row[1]?.toString().trim();
-        if (vin && service) {
-          vinData[vin] = service;
-        }
-      });
-
-      alert("Excel file uploaded and data imported.");
-    };
-
-    reader.readAsArrayBuffer(file);
-  }
+  // Load denied corrections from localStorage
+  window.onload = function() {
+    const storedData = localStorage.getItem("deniedCorrections");
+    if (storedData) {
+      deniedCorrections = JSON.parse(storedData);
+      updateDashboard();
+    }
+  };
 
   function searchServiceType() {
     const vin = document.getElementById("vinInput").value.trim();
@@ -171,6 +150,7 @@
         incorrect: currentIncorrectService,
         corrected: corrected
       });
+      localStorage.setItem("deniedCorrections", JSON.stringify(deniedCorrections));
       updateDashboard();
 
       document.getElementById("overlay").style.display = "none";
@@ -207,6 +187,14 @@
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+  }
+
+  function confirmClear() {
+    if (confirm("Are you sure you want to clear all correction data? This cannot be undone.")) {
+      deniedCorrections = [];
+      localStorage.removeItem("deniedCorrections");
+      updateDashboard();
+    }
   }
 </script>
 
