@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Service Type Audit Tool</title>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.10/minified/html5-qrcode.min.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -56,6 +57,10 @@
       background: rgba(0, 0, 0, 0.5);
       z-index: 5;
     }
+    #reader {
+      width: 300px;
+      margin-top: 20px;
+    }
   </style>
 </head>
 <body>
@@ -69,6 +74,8 @@
 
   <label>Upload Excel:</label>
   <input type="file" id="excelFile" accept=".xlsx" />
+  <button onclick="startScanner()">Scan VIN with Camera</button>
+  <div id="reader"></div>
 </div>
 
 <div id="result"></div>
@@ -112,7 +119,6 @@
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-      // Assume first row is header, start from second row
       rows.slice(1).forEach(row => {
         const vin = row[0]?.toString().trim();
         const service = row[1]?.toString().trim();
@@ -207,6 +213,29 @@
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+  }
+
+  function startScanner() {
+    const reader = new Html5Qrcode("reader");
+    const config = { fps: 10, qrbox: 250 };
+
+    reader.start(
+      { facingMode: "environment" },
+      config,
+      (decodedText, decodedResult) => {
+        reader.stop().then(() => {
+          document.getElementById("reader").innerHTML = "";
+        });
+
+        document.getElementById("vinInput").value = decodedText;
+        searchServiceType();
+      },
+      (errorMessage) => {
+        // Optionally log error
+      }
+    ).catch((err) => {
+      alert("Error starting camera: " + err);
+    });
   }
 </script>
 
