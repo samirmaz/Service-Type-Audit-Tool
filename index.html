@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Service Type Audit Tool</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    h1 {
+      text-align: center;
+    }
+    .input-section, .dashboard-section {
+      margin-top: 20px;
+    }
+    input[type="text"], input[type="file"], button {
+      padding: 8px;
+      margin: 5px 0;
+      display: block;
+    }
+    #result, #dashboard {
+      margin-top: 20px;
+      border: 1px solid #ccc;
+      padding: 10px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    table, th, td {
+      border: 1px solid #ccc;
+    }
+    th, td {
+      padding: 8px;
+      text-align: left;
+    }
+    .popup {
+      display: none;
+      position: fixed;
+      background: #fff;
+      border: 1px solid #ccc;
+      padding: 20px;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 10;
+    }
+    .overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 5;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Service Type Audit Tool</h1>
+
+<div class="input-section">
+  <label>Scan or Enter VIN:</label>
+  <input type="text" id="vinInput" placeholder="Enter VIN" />
+  <button onclick="searchServiceType()">Search</button>
+
+  <label>Upload Excel:</label>
+  <input type="file" id="excelFile" accept=".xlsx" />
+</div>
+
+<div id="result"></div>
+
+<div id="dashboard" class="dashboard-section">
+  <h3>Denied Corrections Dashboard</h3>
+  <table id="dashboardTable">
+    <thead>
+      <tr>
+        <th>VIN</th>
+        <th>Incorrect Service Type</th>
+        <th>Corrected Service Type</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <button onclick="downloadCSV()">Download as CSV</button>
+</div>
+
+<!-- Pop-up -->
+<div class="overlay" id="overlay"></div>
+<div class="popup" id="popup">
+  <label>Actual Service Type:</label>
+  <input type="text" id="actualServiceType" />
+  <button onclick="saveCorrection()">Submit</button>
+</div>
+
+<script>
+  let vinData = {}; // stores VIN: serviceType pairs
+  let deniedCorrections = [];
+
+  document.getElementById('excelFile').addEventListener('change', handleFileUpload);
+
+  function handleFileUpload(event) {
+    const file = event.target.files[0];
+    const reader = new FileReader();
+
+    reader.onload = function(e) {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+      // Assume first row is header, start from second row
+      rows.slice(1).forEach(row => {
+        const vin = row[0]?.toString().trim();
+        const service = row[1]?.toString().trim();
+        if (vin && service) {
+          vinData[vin] = service;
+        }
+      });
+
+      alert("Excel file uploaded and data imported.");
+    };
+
+    reader.readAsArrayBuffer(file);
+  }
+
+  function searchServiceType() {
+    const vin = document.getElementById("vinInput").value.trim();
+    const resultDiv = document.getElementById("result");
+    if (!vin) {
+      resultDiv.innerHTML = "<p>Please enter a VIN.</p>";
+      return;
+    }
+
+    const serviceType = vinData[vin];
+
+    if (serviceType) {
+      resultDiv.innerHTML = `
+        <p>Service Type: <strong>${serviceType}</strong></p>
+        <button onclick="confirmService()">Confirm</button>
+        <button onclick="denyService('${vin}', '${serviceType}')">Deny</button>
+      `;
+    } else {
+      resultDiv.innerHTML = `<p>No service type found for VIN: ${vin}</p>`;
+    }
+  }
+
+  function confirmService() {
+    alert("Service type confirmed.");
+    document.getElementById("result").innerHTML = "";
+  }
+
+  let currentVIN = "";
+  let currentIncorrectService = "";
+
+  function denyService(vin, incorrectService) {
+    currentVIN = vin;
+    currentIncorrectService = incorrectService;
+    document.getElementById("overlay").style.display = "block";
+    document.getElementById("popup").style.display = "block";
+  }
+
+  function saveCorrection() {
+    const corrected = document.getElementById("actualServiceType").value.trim();
+    if (corrected) {
+      deniedCorrections.push({
+        vin: currentVIN,
+        incorrect: currentIncorrectService,
+        corrected: corrected
+      });
+      updateDashboard();
+
+      document.getElementById("overlay").style.display = "none";
+      document.getElementById("popup").style.display = "none";
+      document.getElementById("actualServiceType").value = "";
+      document.getElementById("result").innerHTML = "";
+    } else {
+      alert("Please enter the actual service type.");
+    }
+  }
+
+  function updateDashboard() {
+    const tbody = document.querySelector("#dashboardTable tbody");
+    tbody.innerHTML = "";
+    deniedCorrections.forEach(entry => {
+      const row = `<tr><td>${entry.vin}</td><td>${entry.incorrect}</td><td>${entry.corrected}</td></tr>`;
+      tbody.innerHTML += row;
+    });
+  }
+
+  function downloadCSV() {
+    let csv = "VIN,Incorrect Service Type,Corrected Service Type\n";
+    deniedCorrections.forEach(entry => {
+      csv += `"${entry.vin}","${entry.incorrect}","${entry.corrected}"\n`;
+    });
+
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.setAttribute("hidden", "");
+    a.setAttribute("href", url);
+    a.setAttribute("download", "denied_corrections.csv");
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+</script>
+
+</body>
+</html>
