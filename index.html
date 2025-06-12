@@ -104,8 +104,9 @@
 </div>
 
 <script>
-  let vinData = {}; // stores VIN: serviceType pairs
+  let vinData = {};
   let deniedCorrections = [];
+  let qrScanner;
 
   document.getElementById('excelFile').addEventListener('change', handleFileUpload);
 
@@ -216,25 +217,42 @@
   }
 
   function startScanner() {
-    const reader = new Html5Qrcode("reader");
+    const container = document.getElementById("reader");
+    container.innerHTML = ""; // Clear any previous instance
     const config = { fps: 10, qrbox: 250 };
 
-    reader.start(
-      { facingMode: "environment" },
-      config,
-      (decodedText, decodedResult) => {
-        reader.stop().then(() => {
-          document.getElementById("reader").innerHTML = "";
-        });
+    if (!Html5Qrcode.getCameras) {
+      alert("Camera access is not supported on this browser.");
+      return;
+    }
 
-        document.getElementById("vinInput").value = decodedText;
-        searchServiceType();
-      },
-      (errorMessage) => {
-        // Optionally log error
+    Html5Qrcode.getCameras().then(devices => {
+      if (devices && devices.length) {
+        const cameraId = devices[0].id;
+        const qr = new Html5Qrcode("reader");
+        qrScanner = qr;
+
+        qr.start(
+          cameraId,
+          config,
+          (decodedText) => {
+            qr.stop().then(() => {
+              container.innerHTML = "";
+            });
+            document.getElementById("vinInput").value = decodedText;
+            searchServiceType();
+          },
+          (errorMessage) => {
+            // console.warn(errorMessage);
+          }
+        ).catch(err => {
+          alert("Error starting camera: " + err);
+        });
+      } else {
+        alert("No camera devices found.");
       }
-    ).catch((err) => {
-      alert("Error starting camera: " + err);
+    }).catch(err => {
+      alert("Camera access denied or unavailable: " + err);
     });
   }
 </script>
