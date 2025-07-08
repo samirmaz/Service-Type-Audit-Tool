@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Service Type Audit Tool</title>
-  <script src="vin-data.js"></script> <!-- Load VIN data from external JS file -->
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -16,15 +15,22 @@
     .input-section, .dashboard-section {
       margin-top: 20px;
     }
-    input[type="text"], button {
+    textarea, button, input[type="text"], select {
       padding: 8px;
       margin: 5px 0;
       display: block;
+      width: 100%;
+      max-width: 400px;
     }
-    #result, #dashboard {
+    #resultsContainer, #dashboard {
       margin-top: 20px;
       border: 1px solid #ccc;
       padding: 10px;
+    }
+    .result-box {
+      border: 1px solid #ccc;
+      padding: 10px;
+      margin-top: 10px;
     }
     table {
       width: 100%;
@@ -48,6 +54,8 @@
       left: 50%;
       transform: translate(-50%, -50%);
       z-index: 10;
+      max-width: 400px;
+      width: 90%;
     }
     .overlay {
       display: none;
@@ -63,12 +71,12 @@
 <h1>Service Type Audit Tool</h1>
 
 <div class="input-section">
-  <label>Scan or Enter VIN:</label>
-  <input type="text" id="vinInput" placeholder="Enter VIN" />
-  <button onclick="searchServiceType()">Search</button>
+  <label>Paste or Enter VINs (one per line):</label>
+  <textarea id="vinInput" rows="5" placeholder="Enter VINs, one per line"></textarea>
+  <button onclick="searchServiceTypes()">Search</button>
 </div>
 
-<div id="result"></div>
+<div id="resultsContainer"></div>
 
 <div id="dashboard" class="dashboard-section">
   <h3>Denied Corrections Dashboard</h3>
@@ -88,16 +96,20 @@
 
 <!-- Pop-up -->
 <div class="overlay" id="overlay"></div>
-<div class="popup" id="popup">
-  <label>Actual Service Type:</label>
-  <input type="text" id="actualServiceType" />
-  <button onclick="saveCorrection()">Submit</button>
-</div>
+<div class="popup" id="popup"></div>
 
 <script>
-  let deniedCorrections = [];
+  // Example VIN data for testing
+  const vinData = {
+    "VIN123": "Standard Parcel",
+    "VIN456": "Standard Parcel - Medium Van",
+    "VIN789": "Standard Parcel - Low Emission Vehicle (Large)"
+  };
 
-  // Load denied corrections from localStorage
+  let deniedCorrections = [];
+  let currentVIN = "";
+  let currentIncorrectService = "";
+
   window.onload = function() {
     const storedData = localStorage.getItem("deniedCorrections");
     if (storedData) {
@@ -106,60 +118,98 @@
     }
   };
 
-  function searchServiceType() {
-    const vin = document.getElementById("vinInput").value.trim();
-    const resultDiv = document.getElementById("result");
-    if (!vin) {
-      resultDiv.innerHTML = "<p>Please enter a VIN.</p>";
+  function searchServiceTypes() {
+    const input = document.getElementById("vinInput").value.trim();
+    const resultsContainer = document.getElementById("resultsContainer");
+    resultsContainer.innerHTML = "";
+
+    if (!input) {
+      resultsContainer.innerHTML = "<p>Please enter at least one VIN.</p>";
       return;
     }
 
-    const serviceType = vinData[vin];
+    const vins = input.split(/\n/).map(v => v.trim()).filter(v => v);
 
-    if (serviceType) {
-      resultDiv.innerHTML = `
-        <p>Service Type: <strong>${serviceType}</strong></p>
-        <button onclick="confirmService()">Confirm</button>
-        <button onclick="denyService('${vin}', '${serviceType}')">Deny</button>
+    vins.forEach(vin => {
+      const serviceType = vinData[vin];
+      const displayService = serviceType ? serviceType : "Not found";
+
+      const box = document.createElement("div");
+      box.className = "result-box";
+      box.innerHTML = `
+        <p><strong>VIN:</strong> ${vin}</p>
+        <p><strong>Service Type:</strong> ${displayService}</p>
+        <button onclick="confirmService('${vin}')">Confirm</button>
+        <button onclick="denyService('${vin}', '${displayService}')">Deny</button>
       `;
-    } else {
-      resultDiv.innerHTML = `<p>No service type found for VIN: ${vin}</p>`;
-    }
+
+      resultsContainer.appendChild(box);
+    });
   }
 
-  function confirmService() {
-    alert("Service type confirmed.");
-    document.getElementById("result").innerHTML = "";
+  function confirmService(vin) {
+    alert(`Service type for ${vin} confirmed.`);
+    clearResults();
   }
 
-  let currentVIN = "";
-  let currentIncorrectService = "";
+  function clearResults() {
+    document.getElementById("resultsContainer").innerHTML = "";
+  }
 
   function denyService(vin, incorrectService) {
     currentVIN = vin;
     currentIncorrectService = incorrectService;
+
     document.getElementById("overlay").style.display = "block";
     document.getElementById("popup").style.display = "block";
+
+    document.getElementById("popup").innerHTML = `
+      <h3>Deny Correction for VIN: ${vin}</h3>
+      <label>Choose Correct Service Type:</label>
+      <select id="serviceTypeDropdown">
+        <option value="">--Select--</option>
+        <option value="Standard Parcel">Standard Parcel</option>
+        <option value="Standard Parcel - Medium Van">Standard Parcel - Medium Van</option>
+        <option value="Standard Parcel - Low Emission Vehicle (Large)">Standard Parcel - Low Emission Vehicle (Large)</option>
+      </select>
+      <label>Additional Information:</label>
+      <input type="text" id="additionalInfo" placeholder="Enter details" />
+      <button onclick="saveCorrection()">Submit</button>
+      <button onclick="closePopup()">Cancel</button>
+    `;
   }
 
   function saveCorrection() {
-    const corrected = document.getElementById("actualServiceType").value.trim();
-    if (corrected) {
-      deniedCorrections.push({
-        vin: currentVIN,
-        incorrect: currentIncorrectService,
-        corrected: corrected
-      });
-      localStorage.setItem("deniedCorrections", JSON.stringify(deniedCorrections));
-      updateDashboard();
+    const selectedServiceType = document.getElementById("serviceTypeDropdown").value.trim();
+    const additionalInfo = document.getElementById("additionalInfo").value.trim();
 
-      document.getElementById("overlay").style.display = "none";
-      document.getElementById("popup").style.display = "none";
-      document.getElementById("actualServiceType").value = "";
-      document.getElementById("result").innerHTML = "";
-    } else {
-      alert("Please enter the actual service type.");
+    if (!selectedServiceType) {
+      alert("Please select a corrected service type.");
+      return;
     }
+
+    let corrected = selectedServiceType;
+    if (additionalInfo) {
+      corrected += ` (Additional Info: ${additionalInfo})`;
+    }
+
+    deniedCorrections.push({
+      vin: currentVIN,
+      incorrect: currentIncorrectService,
+      corrected: corrected
+    });
+
+    localStorage.setItem("deniedCorrections", JSON.stringify(deniedCorrections));
+    updateDashboard();
+
+    closePopup();
+    clearResults();
+  }
+
+  function closePopup() {
+    document.getElementById("overlay").style.display = "none";
+    document.getElementById("popup").style.display = "none";
+    document.getElementById("popup").innerHTML = "";
   }
 
   function updateDashboard() {
